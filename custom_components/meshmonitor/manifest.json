@@ -1,0 +1,13 @@
+{
+  "domain": "meshmonitor",
+  "name": "MeshMonitor",
+  "codeowners": [
+    "@vitska"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/vitska/meshmonitor-ha",
+  "iot_class": "local_push",
+  "requirements": [],
+  "version": "0.8.0",
+  "issue_tracker": "https://github.com/vitska/meshmonitor-ha/issues"
+}

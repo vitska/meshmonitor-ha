@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Home Assistant / editor noise
+.storage/
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local backups and archives
+*.bak
+*.bak-*
+*.orig
+*.zip
+*.tgz

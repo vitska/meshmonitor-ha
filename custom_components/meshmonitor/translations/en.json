@@ -1,0 +1,21 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "MeshMonitor",
+        "description": "Connect Home Assistant to a MeshMonitor instance.\n\n* **URL** – the address you open MeshMonitor on, for example `http://192.168.1.50:8080` (no trailing slash).\n* **API token** – create one in MeshMonitor under **Settings → API tokens** (`mm_v1_…`). It is shown only once.",
+        "data": {
+          "url": "URL",
+          "token": "API token"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to MeshMonitor. Check the URL and that Home Assistant can reach the host.",
+      "invalid_auth": "Invalid API token."
+    },
+    "abort": {
+      "already_configured": "This MeshMonitor instance is already configured."
+    }
+  }
+}

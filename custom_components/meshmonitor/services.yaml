@@ -1,0 +1,31 @@
+send_text:
+  name: Send text
+  description: Broadcast a text message on a channel of a MeshMonitor source.
+  fields:
+    text:
+      name: Text
+      description: Message body to broadcast.
+      required: true
+      example: Door opened
+      selector:
+        text:
+          multiline: true
+    channel:
+      name: Channel
+      description: >-
+        Channel name as shown in MeshMonitor, for example "Private" or
+        "LongFast". Numbers are not accepted. When omitted, the private
+        (encrypted) channel of the source is used.
+      required: false
+      example: Private
+      selector:
+        text:
+    source:
+      name: Source
+      description: >-
+        MeshMonitor source id or name, for example "Local USB Node". Defaults to
+        the primary enabled source.
+      required: false
+      example: Local USB Node
+      selector:
+        text:
