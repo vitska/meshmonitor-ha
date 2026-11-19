@@ -1,0 +1,5 @@
+# Canonical author identity for this repository.
+# GitHub maps commits by author email; the old work address belongs to the
+# viktor-vis account, so map it to the vitska noreply identity.
+Vitska <9980491+vitska@users.noreply.github.com> Viktor Gorovoj <viktor.gorovoj@visma.com>
+Vitska <9980491+vitska@users.noreply.github.com> <viktor.gorovoj@visma.com>
