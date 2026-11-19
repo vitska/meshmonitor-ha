@@ -3,6 +3,29 @@
 All notable changes to this integration are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## 0.8.1
+
+### Fixed
+
+- **Node visibility no longer blocks the Home Assistant event loop.** The
+  sensor, device tracker and binary sensor listeners used to scan the whole
+  entity registry once per mesh node on every coordinator update. With 937
+  known nodes and 3,323 entities that was ~3.1 million string checks per
+  platform per update (measured 4.7 s per platform on a desktop CPU, far
+  longer on the ARM host). A single refresh could freeze Core for over a
+  minute, so the Supervisor watchdog missed health checks and restarted Core.
+  The registry is now indexed once, and only on nodes whose visibility
+  actually changed (measured 26 ms for the index).
+- **Live Unified Messages no longer re-render every node entity.** A live
+  message now notifies only the Unified Messages sensor through a dispatcher
+  signal; it used to call `async_set_updated_data`, which walked every
+  coordinator entity for each message.
+
+### Changed
+
+- Node and telemetry rows pushed by MeshMonitor are coalesced into at most one
+  coordinator update per second instead of one update per pushed row.
+
 ## 0.8.0
 
 ### Added

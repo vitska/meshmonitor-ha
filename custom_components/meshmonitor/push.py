@@ -54,6 +54,11 @@ class MeshMonitorPush:
         self._task: asyncio.Task | None = None
         self._closing = False
         self._seen_events: set[str] = set()
+        # MeshMonitor pushes node/telemetry updates in bursts.  Coalesce them
+        # into at most one coordinator update per second instead of re-rendering
+        # every entity for every pushed row.
+        self._update_scheduled = False
+        self._update_handle: asyncio.TimerHandle | None = None
 
     @property
     def _ws_url(self) -> str:
@@ -72,6 +77,9 @@ class MeshMonitorPush:
 
     async def async_stop(self) -> None:
         self._closing = True
+        if self._update_handle is not None:
+            self._update_handle.cancel()
+            self._update_handle = None
         if self._task is not None:
             self._task.cancel()
             try:
@@ -79,6 +87,20 @@ class MeshMonitorPush:
             except asyncio.CancelledError:
                 pass
             self._task = None
+
+    def _schedule_update(self) -> None:
+        """Apply pushed rows to Home Assistant at most once per second."""
+        if self._closing or self._update_scheduled:
+            return
+        self._update_scheduled = True
+        self._update_handle = self._hass.loop.call_later(1.0, self._flush_update)
+
+    def _flush_update(self) -> None:
+        self._update_scheduled = False
+        self._update_handle = None
+        if self._closing or self._coordinator.data is None:
+            return
+        self._coordinator.async_set_updated_data(self._coordinator.data)
 
     async def _run(self) -> None:
         backoff = RECONNECT_MIN
@@ -163,14 +185,13 @@ class MeshMonitorPush:
                     node_num and existing.get("nodeNum") == node_num
                 ):
                     existing.update(node)
-                    self._coordinator.async_set_updated_data(data)
+                    self._schedule_update()
                     return
         # A node we have never polled: fetch the full picture once.
         self._hass.async_create_task(self._coordinator.async_request_refresh())
 
     def _apply_batched_nodes(self, batch: dict[str, Any]) -> None:
         """node:batch carries {nodeNum: {field: value}} for several nodes."""
-        data = self._coordinator.data or {}
         changed = False
         for node_num, fields in batch.items():
             if not isinstance(fields, dict):
@@ -181,7 +202,7 @@ class MeshMonitorPush:
                     changed = True
                     break
         if changed:
-            self._coordinator.async_set_updated_data(data)
+            self._schedule_update()
 
     def _apply_message(self, event: str, data: Any) -> None:
         """Feed one live message into the unified list and the HA event bus."""
@@ -194,7 +215,6 @@ class MeshMonitorPush:
 
     def _apply_telemetry(self, batch: dict[str, Any]) -> None:
         """telemetry:batch carries {nodeNum: [{telemetryType, value, ...}]}."""
-        data = self._coordinator.data or {}
         changed = False
         nodes_by_num = {str(node.get("nodeNum")): node for node in self._nodes_of(None)}
         for node_num, rows in batch.items():
@@ -212,4 +232,4 @@ class MeshMonitorPush:
                     telemetry[key] = row["value"]
                     changed = True
         if changed:
-            self._coordinator.async_set_updated_data(data)
+            self._schedule_update()

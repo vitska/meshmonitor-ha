@@ -15,7 +15,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
 from .coordinator import MeshMonitorCoordinator
 from .entity import MeshMonitorNodeEntity
-from .util import async_set_node_entities_hidden, node_is_online
+from .util import async_apply_node_visibility, node_is_online
 
 
 async def async_setup_entry(
@@ -23,23 +23,27 @@ async def async_setup_entry(
 ) -> None:
     coordinator: MeshMonitorCoordinator = hass.data[DOMAIN][entry.entry_id]
     known: set[str] = set()
+    visibility: dict[str, bool] = {}
 
     @callback
     def _add_new() -> None:
         entities = []
         now = time.time()
+        changed_nodes: dict[str, bool] = {}
         for source_id, payload in (coordinator.data or {}).items():
             source = payload.get("source") or {}
             for node in payload.get("nodes", []):
                 key = f"{source_id}_{node.get('nodeId')}"
                 online = node_is_online(node, now)
-                async_set_node_entities_hidden(
-                    hass, entry, key, not online, ("_online",)
-                )
+                if visibility.get(key) != online:
+                    visibility[key] = online
+                    changed_nodes[key] = online
                 if not online or key in known:
                     continue
                 known.add(key)
                 entities.append(MeshMonitorNodeOnline(coordinator, source, node))
+        if changed_nodes:
+            async_apply_node_visibility(hass, entry, changed_nodes, ("_online",))
         if entities:
             async_add_entities(entities)
 

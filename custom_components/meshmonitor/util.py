@@ -37,32 +37,44 @@ def node_is_online(node: dict[str, Any] | None, now: float | None = None) -> boo
     return (now if now is not None else time.time()) - value <= ONLINE_WINDOW_SECONDS
 
 
-def async_set_node_entities_hidden(
+def async_apply_node_visibility(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    key: str,
-    hidden: bool,
-    suffixes: tuple[str, ...] | None = None,
+    visibility: dict[str, bool],
+    suffixes: tuple[str, ...],
 ) -> None:
-    """Hide/unhide every entity of one mesh node from the HA UI.
+    """Hide/unhide every entity of the nodes whose visibility changed.
 
-    Hiding (rather than deleting) keeps history and lets a node come back
-    without churning the entity registry.  ``suffixes`` limits the operation to
-    one platform's unique-id suffixes.
+    ``visibility`` maps node key to *visible* (True means the node should be
+    shown).  Hiding (rather than deleting) keeps history and lets a node come
+    back without churning the entity registry.  ``suffixes`` limits the
+    operation to one platform's unique-id suffixes.
+
+    The registry is indexed once per call.  Scanning it once per *node* made
+    this O(nodes x entities): with a few hundred stale mesh nodes and a few
+    thousand entities that work ran on every coordinator update and saturated
+    the event loop, so the Supervisor watchdog restarted Core.  Callers pass
+    only the nodes whose visibility actually changed.
     """
     registry = er.async_get(hass)
+    by_node: dict[str, list] = {}
     for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
         unique_id = entity.unique_id or ""
-        if unique_id != key and not unique_id.startswith(f"{key}_"):
-            continue
-        if suffixes is not None and not any(
-            unique_id.endswith(suffix) for suffix in suffixes
-        ):
-            continue
-        if hidden:
-            if entity.hidden_by is None:
-                registry.async_update_entity(
-                    entity.entity_id, hidden_by=er.RegistryEntryHider.INTEGRATION
-                )
-        elif entity.hidden_by == er.RegistryEntryHider.INTEGRATION:
-            registry.async_update_entity(entity.entity_id, hidden_by=None)
+        for suffix in suffixes:
+            if unique_id.endswith(suffix):
+                by_node.setdefault(unique_id[: -len(suffix)], []).append(entity)
+                break
+
+    if not by_node:
+        return
+
+    for node_key, visible in visibility.items():
+        for entity in by_node.get(node_key, ()):
+            if not visible:
+                if entity.hidden_by is None:
+                    registry.async_update_entity(
+                        entity.entity_id,
+                        hidden_by=er.RegistryEntryHider.INTEGRATION,
+                    )
+            elif entity.hidden_by == er.RegistryEntryHider.INTEGRATION:
+                registry.async_update_entity(entity.entity_id, hidden_by=None)

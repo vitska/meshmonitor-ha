@@ -13,13 +13,14 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, UNIFIED_ATTRIBUTE_LIMIT
+from .const import DOMAIN, SIGNAL_UNIFIED_MESSAGE, UNIFIED_ATTRIBUTE_LIMIT
 from .coordinator import MeshMonitorCoordinator
 from .entity import MeshMonitorNodeEntity
-from .util import async_set_node_entities_hidden, node_is_online
+from .util import async_apply_node_visibility, node_is_online
 
 
 def _timestamp(node: dict):
@@ -179,6 +180,7 @@ async def async_setup_entry(
     coordinator: MeshMonitorCoordinator = hass.data[DOMAIN][entry.entry_id]
     known: set[str] = set()
     known_sources: set[str] = set()
+    visibility: dict[str, bool] = {}
 
     async_add_entities([MeshMonitorUnifiedMessagesSensor(coordinator, entry)])
 
@@ -186,6 +188,7 @@ async def async_setup_entry(
     def _add_new() -> None:
         entities = []
         now = time.time()
+        changed_nodes: dict[str, bool] = {}
         for source_id, payload in (coordinator.data or {}).items():
             source = payload.get("source") or {}
             is_mqtt = str(source.get("type") or "").startswith("mqtt")
@@ -206,9 +209,9 @@ async def async_setup_entry(
             for node in payload.get("nodes", []):
                 key = f"{source_id}_{node.get('nodeId')}"
                 online = node_is_online(node, now)
-                async_set_node_entities_hidden(
-                    hass, entry, key, not online, SENSOR_SUFFIXES
-                )
+                if visibility.get(key) != online:
+                    visibility[key] = online
+                    changed_nodes[key] = online
                 if not online:
                     continue
                 if key in known:
@@ -224,6 +227,8 @@ async def async_setup_entry(
                     if is_meshcore and description["key"] in MESHCORE_SKIP:
                         continue
                     entities.append(MeshMonitorNodeSensor(coordinator, source, node, description))
+        if changed_nodes:
+            async_apply_node_visibility(hass, entry, changed_nodes, SENSOR_SUFFIXES)
         if entities:
             async_add_entities(entities)
 
@@ -401,6 +406,19 @@ class MeshMonitorUnifiedMessagesSensor(CoordinatorEntity[MeshMonitorCoordinator]
         self._entry_id = entry.entry_id
         self._attr_name = "Unified messages"
         self._attr_unique_id = f"{entry.entry_id}_unified_messages"
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, SIGNAL_UNIFIED_MESSAGE, self._handle_unified_message
+            )
+        )
+
+    @callback
+    def _handle_unified_message(self) -> None:
+        """A live message changed only this sensor, not the node data."""
+        self.async_write_ha_state()
 
     @property
     def native_value(self):

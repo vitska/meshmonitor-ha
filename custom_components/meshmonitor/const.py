@@ -5,6 +5,11 @@ CONF_TOKEN = "token"
 DEFAULT_SCAN_INTERVAL = 60
 PLATFORMS = ["device_tracker", "sensor", "binary_sensor"]
 
+# Live messages only change the Unified Messages sensor.  A dedicated signal
+# avoids a full coordinator update (and every node entity re-render) per
+# message.
+SIGNAL_UNIFIED_MESSAGE = f"{DOMAIN}_unified_message"
+
 # A node counts as "available" while it has been heard within this window.
 # Nodes outside it are not exposed to Home Assistant at all.
 ONLINE_WINDOW_SECONDS = 2 * 60 * 60

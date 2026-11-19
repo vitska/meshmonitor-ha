@@ -9,6 +9,7 @@ import time
 from datetime import timedelta
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import MeshMonitorApi, MeshMonitorError
@@ -17,6 +18,7 @@ from .const import (
     DOMAIN,
     LINK_STORE,
     LINK_TTL_DAYS,
+    SIGNAL_UNIFIED_MESSAGE,
     UNIFIED_MESSAGE_LIMIT,
     protocol_label,
 )
@@ -459,6 +461,8 @@ class MeshMonitorCoordinator(DataUpdateCoordinator[dict]):
             return None
         self.unified_messages = self._merge_messages([normalized], self.unified_messages)
         self.unified_updated = int(time.time())
-        if self.data is not None:
-            self.async_set_updated_data(self.data)
+        # Only the Unified Messages sensor reads this list.  Notify it
+        # directly instead of re-rendering every node entity on the
+        # coordinator.
+        async_dispatcher_send(self.hass, SIGNAL_UNIFIED_MESSAGE)
         return normalized

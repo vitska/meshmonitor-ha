@@ -13,7 +13,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
 from .coordinator import MeshMonitorCoordinator
 from .entity import MeshMonitorNodeEntity
-from .util import async_set_node_entities_hidden, node_is_online
+from .util import async_apply_node_visibility, node_is_online
 
 
 def _distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -31,11 +31,13 @@ async def async_setup_entry(
 ) -> None:
     coordinator: MeshMonitorCoordinator = hass.data[DOMAIN][entry.entry_id]
     known: set[str] = set()
+    visibility: dict[str, bool] = {}
 
     @callback
     def _add_new() -> None:
         entities = []
         now = time.time()
+        changed_nodes: dict[str, bool] = {}
         for source_id, payload in (coordinator.data or {}).items():
             source = payload.get("source") or {}
             for node in payload.get("nodes", []):
@@ -45,13 +47,15 @@ async def async_setup_entry(
                     and node.get("latitude") is not None
                     and node.get("longitude") is not None
                 )
-                async_set_node_entities_hidden(
-                    hass, entry, key, not visible, ("_position",)
-                )
+                if visibility.get(key) != visible:
+                    visibility[key] = visible
+                    changed_nodes[key] = visible
                 if not visible or key in known:
                     continue
                 known.add(key)
                 entities.append(MeshMonitorTracker(coordinator, source, node))
+        if changed_nodes:
+            async_apply_node_visibility(hass, entry, changed_nodes, ("_position",))
         if entities:
             async_add_entities(entities)
 
